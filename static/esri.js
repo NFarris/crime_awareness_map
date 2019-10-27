@@ -4,8 +4,55 @@
  * Author: Logan Bussell
  */
 
+const WALK_METHOD = JSON.stringify({"attributeParameterValues":[
+  {
+      "attributeName":"Avoid Private Roads",
+      "parameterName":"Restriction Usage",
+      "value":"AVOID_MEDIUM"
+  },
+  {
+      "attributeName":"Walking",
+      "parameterName":"Restriction Usage",
+      "value":"PROHIBITED"
+  },
+  {
+      "attributeName":"Preferred for Pedestrians",
+      "parameterName":"Restriction Usage",
+      "value":"PREFER_LOW"
+  },
+  {
+      "attributeName":"WalkTime",
+      "parameterName":"Walking Speed (km/h)",
+      "value":5
+  },
+  {
+      "attributeName":"Avoid Roads Unsuitable for Pedestrians",
+      "parameterName":"Restriction Usage",
+      "value":"AVOID_HIGH"
+  }
+],
+"description":"Follows paths and roads that allow pedestrian traffic and finds solutions that optimize travel time. The walking speed is set to 5 kilometers per hour.",
+"distanceAttributeName":"Kilometers",
+"id":"caFAgoThrvUpkFBW",
+"impedanceAttributeName":"WalkTime",
+"name":"Walking Time",
+"restrictionAttributeNames":[
+  "Avoid Private Roads",
+  "Avoid Roads Unsuitable for Pedestrians",
+  "Preferred for Pedestrians",
+  "Walking"
+],
+"simplificationTolerance":2,
+"simplificationToleranceUnits":"esriMeters",
+"timeAttributeName":"WalkTime",
+"type":"WALK",
+"useHierarchy":false,
+"uturnAtJunctions":"esriNFSBAllowBacktrack"
+
+});
+
 const ROUTE_TASK_URL =
-  "https://route.arcgis.com/arcgis/rest/services/World/Route/NAServer/Route_World";
+"https://route.arcgis.com/arcgis/rest/services/World/Route/NAServer/Route_World";
 
 const CRIME_FILTER = [
   "",
@@ -199,7 +246,7 @@ require([
     var graphic = new Graphic({
       symbol: {
         type: "picture-marker",
-        url: "static/img/pin.png",
+        url: "http://esricrime.azurewebsites.net/image",
         width: "64px",
         height: "64px",
         yoffset: "32px"
@@ -268,9 +315,23 @@ require([
     setFeatureLayerViewFilter(event.target.value, 0);
   });
 
+  var routeInfo = document.createElement('div');
+  var text = document.createElement('p');
+  text.innerHTML = "Distance: <br> Expected Time: ";
+  routeInfo.style.backgroundColor = "white";
+  routeInfo.style.width = "200px";
+  routeInfo.style.height = "40px";
+  text.style.fontFamily = "Avenir Next W00";
+  text.style.fontSize = "1em";
+  text.style.wordWrap = "break-word";
+  text.style.marginLeft = "10px";
+  routeInfo.appendChild(text);
+  routeInfo.style.display = "none";
+
   view.ui.add(timeSelectFilter, "top-right");
   view.ui.add(crimeSelectFilter, "top-right");
   view.ui.add(search, "top-right");
+  view.ui.add(routeInfo, "bottom-right");
 
   view.on("click", function(event) {
     if (view.graphics.length === 0) {
@@ -281,6 +342,7 @@ require([
       getRoute();
     } else {
       view.graphics.removeAll();
+      routeInfo.style.display = "none";
       addGraphic("start", event.mapPoint);
     }
   });
@@ -289,6 +351,7 @@ require([
     console.log("in getroute");
     // Setup the route parameters
     var query = crimeBlockerFeatureLayer.createQuery();
+    var curTime = new Date();
     var features = crimeBlockerFeatureLayer.queryFeatures(query).then(
       features => {
         console.log("features", features);
@@ -297,11 +360,20 @@ require([
             features: view.graphics.toArray() // Pass the array of graphics
           }),
           returnDirections: true,
-          polygonBarriers: features
+          polygonBarriers: features,
+          startTime: curTime,
+          startTimeIsUTC: true,
+          travelMode: WALK_METHOD
         });
         // Get the route
         routeTask.solve(routeParams).then(function(data) {
           console.log("route task solved data", data);
+          d = data.routeResults[0].route.attributes;
+          miles = Math.round(10*d.Total_Miles)/10;
+          minutes = Math.round(d.Total_WalkTime);
+          text.innerHTML = "Distance: " + miles + " miles <br>Expected Time: "
+              + minutes + " minutes";
+          routeInfo.style.display = "block";
           data.routeResults.forEach(function(result) {
             result.route.symbol = {
               type: "simple-line",
